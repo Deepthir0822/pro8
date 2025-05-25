@@ -1,6 +1,9 @@
 sudo adduser [username]
+
 sudo usermod -aG sudo [username]
+
 ssh-keygen
+
 ssh-copy-id [username]@[remote-host]
 cat /etc/resolv.conf or hostname -i
 ssh ansible@192.168.0.81
