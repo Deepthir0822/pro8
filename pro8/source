@@ -1,16 +1,16 @@
 C:\ProgramData\Jenkins\.jenkins\secrets\initialAdminPassword
 
-sudo adduser [username]
+sudo adduser ansible
 
-sudo usermod -aG sudo [username]
+sudo usermod -aG sudo ansible
+
+sudo su ansible
 
 ssh-keygen
 
-ssh-copy-id [username]@[remote-host]
+hostname -i
 
-cat /etc/resolv.conf or hostname -i
-
-ssh ansible@192.168.0.81
+ssh-copy-id ansible@[remote-host]
 
 sudo apt update
 
