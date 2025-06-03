@@ -28,7 +28,9 @@ ansible-inventory --list -y
 
 sudo ansible all -m ping
 
-mkdir maventest1 cd maventest1 archetype:generate
+mkdir maventest1 
+cd maventest1 
+archetype:generate
 -DgroupId=com.yourname
 -DartifactId=repo_name
 -DarchetypeArtifactId=maven-archetype-quickstart
@@ -45,3 +47,38 @@ git branch -M main
 git remote add origin https://github.com/amitdalvik/xyz.git
 
 git push -u origin main
+
+
+
+
+1. Create an administrator-level user for the control node. Use the adduser
+command:
+sudo adduser [username]
+Use the following usermod command to assign superuser privileges to the
+account:
+sudo usermod -aG sudo [username]
+A membership in the sudo group allows the user to utilize the sudo command to
+perform administrative tasks.
+4. Switch to the newly created user on the control node:
+sudo su [username]
+Set up an SSH Key pair
+The Ansible control node uses SSH to connect to hosts. Generate an SSH key
+pair for the Ansible user by executing the following steps:
+1. Enter the command below using the Ansible control node command line:
+ssh-keygen
+The system generates the public/private key pair and prints the randomart image.
+Configure an Ansible Host
+Ansible hosts are remote servers managed by the Ansible control node. Each
+host must have the control node's SSH public key into authorized_keys directory.
+Apply the steps below for each new Ansible host:
+1. Use the following ssh-copy-id command on the control node to copy the public
+key to a host:
+ssh-copy-id [username]@[remote-host]
+Ensure the package index is up to date
+sudo apt update
+2. Install Ansible on Ubuntu with the following command:
+sudo apt install ansible -y
+
+Follow the steps below to create an inventory file on the control node:
+1. Create the ansible subdirectory in the etc directory:
+sudo mkdir -p /etc/ansible
