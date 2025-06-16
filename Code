@@ -1,0 +1,139 @@
+from report_generator import generate_final_report
+
+if __name__ == "__main__":
+    user_email = input("Enter user email: ").strip()
+    generate_final_report(user_email)
+
+
+GET_INST_DETAILS = """
+SELECT INST_ID, TPL_ID, INST_NAME
+FROM DWH_OWNER.TST_INST
+WHERE UPDATED_BY = :email AND SG_ID IS NULL
+"""
+
+GET_LATEST_PYTHON_RUN = """
+SELECT COB, STATUS, STATUS_COMMENT
+FROM DWH_OWNER.TST_PYTHON_RUN
+WHERE INST_ID = :inst_id
+ORDER BY COB DESC FETCH FIRST 1 ROWS ONLY
+"""
+
+GET_LATEST_TST_RUN = """
+SELECT COB, STATUS, STATUS_COMMENT
+FROM DWH_OWNER.TST_RUN
+WHERE INST_ID = :inst_id
+ORDER BY COB DESC FETCH FIRST 1 ROWS ONLY
+"""
+
+GET_TEMPLATE_SCRIPT = """
+SELECT TST_DEF
+FROM DWH_OWNER.TST_TEMPLATE
+WHERE TPL_ID = :tpl_id
+"""
+
+CHECK_TABLE_POPULATED = """
+SELECT COUNT(*) FROM BUSR_PY_OWNER.{table_name}
+WHERE COB = (SELECT GET.COB(-1) FROM DUAL)
+"""
+
+
+
+import cx_Oracle
+import os
+from utils import (
+    connect_to_db, 
+    extract_table_name_from_script, 
+    convert_to_snake_case, 
+    check_table_population, 
+    load_script_content
+)
+from sql_queries import (
+    GET_INST_DETAILS, GET_LATEST_PYTHON_RUN,
+    GET_LATEST_TST_RUN, GET_TEMPLATE_SCRIPT
+)
+
+def generate_final_report(email):
+    conn = connect_to_db()
+    cursor = conn.cursor()
+
+    cursor.execute(GET_INST_DETAILS, {"email": email})
+    inst_rows = cursor.fetchall()
+
+    print(f"{'INST_ID':<10} {'TPL_ID':<10} {'INST_NAME':<30} {'COB':<12} {'STATUS':<10} {'COMMENT':<30} {'COLOR':<10}")
+    print("-" * 120)
+
+    for inst_id, tpl_id, inst_name in inst_rows:
+        cursor.execute(GET_LATEST_PYTHON_RUN, {"inst_id": inst_id})
+        py_run = cursor.fetchone()
+
+        if py_run:
+            cob, status, comment = py_run
+        else:
+            cursor.execute(GET_LATEST_TST_RUN, {"inst_id": inst_id})
+            tst_run = cursor.fetchone()
+            if not tst_run:
+                continue
+            cob, status, comment = tst_run
+
+        # Determine script path from template
+        cursor.execute(GET_TEMPLATE_SCRIPT, {"tpl_id": tpl_id})
+        result = cursor.fetchone()
+        if result:
+            script_path = result[0]
+        else:
+            continue
+
+        # Determine color
+        status_lower = status.lower()
+        if 'fail' in status_lower:
+            color = 'Red'
+        elif 'complete' in status_lower or 'finished' in status_lower:
+            script_content = load_script_content(script_path)
+            table_name_raw = extract_table_name_from_script(script_content)
+            if table_name_raw:
+                table_snake = convert_to_snake_case(table_name_raw)
+                populated = check_table_population(cursor, table_snake)
+                color = 'Green' if populated else 'Yellow'
+            else:
+                color = 'Yellow'
+        else:
+            color = 'Yellow'
+
+        print(f"{inst_id:<10} {tpl_id:<10} {inst_name:<30} {str(cob):<12} {status:<10} {comment:<30} {color:<10}")
+
+    cursor.close()
+    conn.close()
+
+
+import cx_Oracle
+import re
+import os
+
+def connect_to_db():
+    dsn = cx_Oracle.makedsn("YOUR_HOST", PORT, sid="YOUR_SID")  # Or use service_name if needed
+    conn = cx_Oracle.connect(user="YOUR_USERNAME", password="YOUR_PASSWORD", dsn=dsn)
+    return conn
+
+def load_script_content(script_path):
+    try:
+        with open(script_path, 'r') as f:
+            return f.read()
+    except Exception:
+        return ""
+
+def extract_table_name_from_script(script_content):
+    match = re.search(r'publish_result\s*\(.*table_name\s*=\s*[\'"]([a-zA-Z0-9]+)[\'"]', script_content)
+    return match.group(1) if match else None
+
+def convert_to_snake_case(name):
+    s1 = re.sub(r'(.)([A-Z][a-z]+)', r'\1_\2', name)
+    snake = re.sub(r'([a-z0-9])([A-Z])', r'\1_\2', s1).lower()
+    return snake
+
+def check_table_population(cursor, table_name):
+    try:
+        cursor.execute(f"SELECT COUNT(*) FROM BUSR_PY_OWNER.{table_name} WHERE COB = (SELECT GET.COB(-1) FROM DUAL)")
+        count = cursor.fetchone()[0]
+        return count > 0
+    except Exception:
+        return False
